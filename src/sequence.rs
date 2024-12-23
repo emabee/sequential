@@ -1,4 +1,4 @@
-use crate::u_number::UNumber;
+use crate::seq_num::SeqNum;
 use std::iter::Iterator;
 
 #[cfg(feature = "serde")]
@@ -8,9 +8,9 @@ use serde::{Deserialize, Serialize};
 ///
 /// Can be fast-forwarded to skip numbers, but cannot be wound back.
 ///
-/// Stops producing values when the limit of the chosen type T is reached.
+/// Stops producing values when the limit of the chosen type `T` is reached.
 ///
-/// Can easily be written to an read from files, as it tmplements `serde::ser::Serialize` and `serde::de::Deserialize`.
+/// Optionally (with feature `serde`) implements `serde::ser::Serialize` and `serde::de::Deserialize`.
 ///
 /// Works with all unsigned integers, from `u8` to `u128`.
 ///
@@ -42,32 +42,39 @@ use serde::{Deserialize, Serialize};
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[derive(Clone, Default, Debug)]
 pub struct Sequence<T> {
-    o_next: Option<T>,
+    next: T,
+    // if > 0: the increment; if == 0: the instance is passivated
+    incr: T,
 }
 
 impl<T> Sequence<T>
 where
-    T: UNumber,
+    T: SeqNum,
 {
-    /// Produces an instance that starts with 0.
+    /// Produces an instance that starts with 0 and increments by 1.
     #[must_use]
     pub fn new() -> Self {
         Self {
-            o_next: Some(Default::default()),
+            next: Default::default(),
+            incr: T::from(1_u8),
         }
     }
 
     /// New instance that starts with `val`.
     #[must_use]
     pub fn start_with(val: T) -> Self {
-        Self { o_next: Some(val) }
+        Self {
+            next: val,
+            incr: T::from(1_u8),
+        }
     }
 
     /// New instance that starts with `val + 1`.
     #[must_use]
     pub fn start_after(val: T) -> Self {
         Self {
-            o_next: Some(val.n_add(T::from(1_u8))),
+            next: val.n_add(T::from(1_u8)),
+            incr: T::from(1_u8),
         }
     }
 
@@ -80,35 +87,59 @@ where
         )
     }
 
+    /// Lets the sequence increment with the given value.
+    /// If 0 is given, the sequence will not return any further value.
+    #[must_use]
+    pub fn use_increment(mut self, incr: T) -> Self {
+        if self.is_active() {
+            self.incr = incr;
+        }
+        self
+    }
+
     /// Make sure that the Sequence will never produce the given value,
     /// by increasing the next value if necessary.
     pub fn continue_after(&mut self, val: T) {
-        if val == T::max_val() {
-            self.o_next = None;
-        } else if let Some(ref mut next) = self.o_next {
-            *next = std::cmp::max(*next, val.n_add(T::from(1_u8)));
+        let mut diff = T::max_val();
+        diff -= self.incr;
+        if val > diff {
+            self.set_passive();
         }
+        if self.is_active() {
+            self.next = std::cmp::max(self.next, val.n_add(self.incr));
+        }
+    }
+
+    fn set_passive(&mut self) {
+        self.incr = T::from(0_u8);
+    }
+    fn is_active(&self) -> bool {
+        self.incr != T::from(0_u8)
+    }
+    fn is_passive(&self) -> bool {
+        self.incr == T::from(0_u8)
     }
 }
 
 impl<T> Iterator for Sequence<T>
 where
-    T: UNumber,
+    T: SeqNum,
 {
     type Item = T;
 
     fn next(&mut self) -> Option<Self::Item> {
-        match self.o_next {
-            None => None,
-            Some(ref mut next) => {
-                let current = *next;
-                if *next == T::max_val() {
-                    self.o_next = None;
-                } else {
-                    *next += T::from(1_u8);
-                }
-                Some(current)
+        if self.is_passive() {
+            None
+        } else {
+            let current = self.next;
+            let mut diff = T::max_val();
+            diff -= self.incr;
+            if current > diff {
+                self.set_passive();
+            } else {
+                self.next += self.incr;
             }
+            Some(current)
         }
     }
 }
@@ -133,9 +164,25 @@ mod test {
     }
 
     #[test]
+    fn test_increment() {
+        let mut sequence = Sequence::<u8>::new().use_increment(5);
+        assert_eq!(sequence.next(), Some(0));
+        assert_eq!(sequence.next(), Some(5));
+        assert_eq!(sequence.next(), Some(10));
+
+        sequence.continue_after(152);
+        assert_eq!(sequence.next(), Some(157));
+        assert_eq!(sequence.next(), Some(162));
+
+        sequence.continue_after(251);
+        assert_eq!(sequence.next(), None);
+    }
+
+    #[test]
     fn test_exhaust() {
         let mut sequence = Sequence::<u64>::new();
         sequence.continue_after(u64::MAX - 1);
+        assert!(sequence.is_active());
         assert!(sequence.next().is_some());
         assert!(sequence.next().is_none());
     }
@@ -146,6 +193,9 @@ mod test {
         let mut sequence = Sequence::<u32>::start_with(55);
         assert_eq!(sequence.next(), Some(55));
         let s = serde_json::to_string(&sequence).unwrap();
-        println!("{s}");
+        assert_eq!(&*s, r#"{"next":56,"incr":1}"#);
+
+        let mut sequence2: Sequence<u32> = serde_json::from_str(&*s).unwrap();
+        assert_eq!(sequence2.next(), Some(56));
     }
 }

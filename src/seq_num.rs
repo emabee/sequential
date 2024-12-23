@@ -1,12 +1,12 @@
-use std::ops::AddAssign;
+use std::ops::{AddAssign, SubAssign};
 
-pub trait UNumber:
-    Default + Copy + Ord + AddAssign + From<u8> + TryFrom<u128> + Into<u128> + PartialEq
+pub trait SeqNum:
+    Default + Copy + Ord + AddAssign + SubAssign + From<u8> + TryFrom<u128> + Into<u128> + PartialEq
 {
     fn max_val() -> Self;
     fn n_add(&self, other: Self) -> Self;
 }
-impl UNumber for u8 {
+impl SeqNum for u8 {
     fn max_val() -> Self {
         u8::MAX
     }
@@ -14,7 +14,7 @@ impl UNumber for u8 {
         self + other
     }
 }
-impl UNumber for u16 {
+impl SeqNum for u16 {
     fn max_val() -> Self {
         u16::MAX
     }
@@ -22,7 +22,7 @@ impl UNumber for u16 {
         self + other
     }
 }
-impl UNumber for u32 {
+impl SeqNum for u32 {
     fn max_val() -> Self {
         u32::MAX
     }
@@ -30,7 +30,7 @@ impl UNumber for u32 {
         self + other
     }
 }
-impl UNumber for u64 {
+impl SeqNum for u64 {
     fn max_val() -> Self {
         u64::MAX
     }
@@ -38,7 +38,7 @@ impl UNumber for u64 {
         self + other
     }
 }
-impl UNumber for u128 {
+impl SeqNum for u128 {
     fn max_val() -> Self {
         u128::MAX
     }
