@@ -4,7 +4,7 @@ version = "0.3.0"
 edition = "2021"
 description = "A configurable sequential number generator."
 license = "MIT OR Apache-2.0"
-keywords = ["data management"]
+keywords = ["data", "collections"]
 repository = "https://github.com/emabee/sequential"
 
 [features]
