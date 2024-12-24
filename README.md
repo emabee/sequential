@@ -1,4 +1,5 @@
 [![Latest version](https://img.shields.io/crates/v/sequential.svg)](https://crates.io/crates/sequential)
+[![Build](https://img.shields.io/github/actions/workflow/status/emabee/sequential/rust.yml?branch=main)](https://github.com/emabee/sequential/actions?query=workflow%3ACI)
 [![Documentation](https://docs.rs/sequential/badge.svg)](https://docs.rs/sequential)
 [![License](https://img.shields.io/crates/l/sequential.svg)](https://github.com/emabee/sequential)
 [![unsafe forbidden](https://img.shields.io/badge/unsafe-forbidden-success.svg)](https://github.com/rust-secure-code/safety-dance/)
@@ -19,7 +20,7 @@ Add `sequential` to the dependencies section in your project's `Cargo.toml`
 
 ```toml
 [dependencies]
-sequential = "0.3"
+sequential = "0.4"
 ```
 
 ## Example
