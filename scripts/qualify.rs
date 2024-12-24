@@ -74,7 +74,7 @@ fn main() {
     run_command!("cargo +nightly doc --no-deps --open");
 
     // check version consistency
-    // FIXME run_command!("cargo run --example version_numbers");
+    run_command!("cargo run --example version_numbers");
 
     // check git status
     let mut cmd = command!("git status -s");

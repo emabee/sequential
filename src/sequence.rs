@@ -4,11 +4,13 @@ use std::iter::Iterator;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
-/// Produces monotonously increasing integer numbers, starting from a configurable start-point.
+/// A number generator that produces monotonously increasing integer numbers,
+/// starting from a configurable start-point.
 ///
 /// Can be fast-forwarded to skip numbers, but cannot be wound back.
 ///
-/// Stops producing values when the limit of the chosen type `T` is reached.
+/// Passivates itself when the limit of the chosen type `T` is reached.
+/// Passive instances do not produce values anymore.
 ///
 /// Optionally (with feature `serde`) implements `serde::ser::Serialize` and `serde::de::Deserialize`.
 ///
@@ -55,42 +57,68 @@ where
     #[must_use]
     pub fn new() -> Self {
         Self {
-            next: Default::default(),
-            incr: T::from(1_u8),
+            next: T::zero(),
+            incr: T::one(),
         }
     }
 
-    /// New instance that starts with `val`.
+    // Produces a dead instance, good for nothing.
+    #[must_use]
+    fn dead() -> Self {
+        Self {
+            next: T::zero(),
+            incr: T::zero(),
+        }
+    }
+
+    /// Produces an instance that starts with `val` and increments by 1.
     #[must_use]
     pub fn start_with(val: T) -> Self {
         Self {
             next: val,
-            incr: T::from(1_u8),
+            incr: T::one(),
         }
     }
 
-    /// New instance that starts with `val + 1`.
+    /// Produces an instance that starts with `val + 1` and increments by 1.
     #[must_use]
     pub fn start_after(val: T) -> Self {
-        Self {
-            next: val.n_add(T::from(1_u8)),
-            incr: T::from(1_u8),
+        match val.checked_add(T::one()) {
+            Some(next) => Self {
+                next,
+                incr: T::one(),
+            },
+            None => Self::dead(),
         }
     }
 
-    /// New instance that starts after the highest value returned by the iterator.
-    pub fn start_after_highest(values: &mut dyn std::iter::Iterator<Item = T>) -> Self {
+    /// Produces an instance that starts after the highest value returned by the iterator.
+    pub fn start_after_highest(values: &mut dyn Iterator<Item = T>) -> Self {
         Self::start_after(
             values
                 .reduce(|x, y| std::cmp::max(x, y))
-                .unwrap_or(T::from(0_u8)),
+                .unwrap_or(T::zero()),
         )
     }
 
-    /// Lets the sequence increment with the given value.
-    /// If 0 is given, the sequence will not return any further value.
+    /// Consumes the sequence and produces one that increments with the given value.
+    ///
+    /// An increment of `0` produces a dead sequence that will not return any value.
+    ///
+    /// Note: the new increment takes effect _after_ the next value, not with the next value.
+    /// This is irrelevant if you call this method before consuming any value.
+    ///
+    /// ## Example
+    ///
+    /// ```rust
+    /// # use sequential::Sequence;
+    /// let mut sequence = Sequence::<usize>::new().with_increment(5);
+    /// assert_eq!(sequence.next(), Some(0));
+    /// assert_eq!(sequence.next(), Some(5));
+    /// assert_eq!(sequence.next(), Some(10));
+    /// ```
     #[must_use]
-    pub fn use_increment(mut self, incr: T) -> Self {
+    pub fn with_increment(mut self, incr: T) -> Self {
         if self.is_active() {
             self.incr = incr;
         }
@@ -100,24 +128,24 @@ where
     /// Make sure that the Sequence will never produce the given value,
     /// by increasing the next value if necessary.
     pub fn continue_after(&mut self, val: T) {
-        let mut diff = T::max_val();
-        diff -= self.incr;
-        if val > diff {
-            self.set_passive();
-        }
-        if self.is_active() {
-            self.next = std::cmp::max(self.next, val.n_add(self.incr));
+        match val.checked_add(self.incr) {
+            Some(candidate) => {
+                self.next = std::cmp::max(self.next, candidate);
+            }
+            None => {
+                self.set_passive();
+            }
         }
     }
 
     fn set_passive(&mut self) {
-        self.incr = T::from(0_u8);
+        self.incr = T::zero();
     }
     fn is_active(&self) -> bool {
-        self.incr != T::from(0_u8)
+        self.incr != T::zero()
     }
     fn is_passive(&self) -> bool {
-        self.incr == T::from(0_u8)
+        self.incr == T::zero()
     }
 }
 
@@ -132,12 +160,13 @@ where
             None
         } else {
             let current = self.next;
-            let mut diff = T::max_val();
-            diff -= self.incr;
-            if current > diff {
-                self.set_passive();
-            } else {
-                self.next += self.incr;
+            match self.next.checked_add(self.incr) {
+                Some(next) => {
+                    self.next = next;
+                }
+                None => {
+                    self.set_passive();
+                }
             }
             Some(current)
         }
@@ -150,9 +179,9 @@ mod test {
 
     #[test]
     fn test_sequence() {
-        let mut sequence = Sequence::<u8>::new();
-        assert_eq!(sequence.next(), Some(0_u8));
-        assert_eq!(sequence.next(), Some(1_u8));
+        let mut sequence = Sequence::<usize>::new();
+        assert_eq!(sequence.next(), Some(0_usize));
+        assert_eq!(sequence.next(), Some(1_usize));
 
         sequence.continue_after(5);
         assert_eq!(sequence.next(), Some(6));
@@ -165,7 +194,7 @@ mod test {
 
     #[test]
     fn test_increment() {
-        let mut sequence = Sequence::<u8>::new().use_increment(5);
+        let mut sequence = Sequence::<u8>::new().with_increment(5);
         assert_eq!(sequence.next(), Some(0));
         assert_eq!(sequence.next(), Some(5));
         assert_eq!(sequence.next(), Some(10));
