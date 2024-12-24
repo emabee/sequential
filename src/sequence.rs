@@ -102,11 +102,11 @@ where
     }
 
     /// Produces an instance that starts after the highest value returned by the iterator.
-    pub fn start_after_highest(values: &mut dyn Iterator<Item = T>) -> Self {
+    pub fn start_after_highest(values: &mut dyn Iterator<Item = &T>) -> Self {
         Self::start_after(
-            values
+            *values
                 .reduce(|x, y| std::cmp::max(x, y))
-                .unwrap_or(T::zero()),
+                .unwrap_or(&T::zero()),
         )
     }
 

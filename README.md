@@ -20,7 +20,7 @@ Add `sequential` to the dependencies section in your project's `Cargo.toml`
 
 ```toml
 [dependencies]
-sequential = "0.4"
+sequential = "0.5"
 ```
 
 ## Example
