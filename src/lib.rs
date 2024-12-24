@@ -10,4 +10,4 @@
 mod seq_num;
 mod sequence;
 
-pub use sequence::Sequence;
+pub use {seq_num::SeqNum, sequence::Sequence};

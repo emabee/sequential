@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 /// Passivates itself when the limit of the chosen type `T` is reached.
 /// Passive instances do not produce values anymore.
 ///
-/// Optionally (with feature `serde`) implements `serde::ser::Serialize` and `serde::de::Deserialize`.
+/// Optionally (with feature `serde`) implements `serde::Serialize` and `serde::Deserialize`.
 ///
 /// Works with all unsigned integers, from `u8` to `u128`.
 ///
@@ -43,10 +43,15 @@ use serde::{Deserialize, Serialize};
 /// ```
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[derive(Clone, Default, Debug)]
-pub struct Sequence<T> {
+pub struct Sequence<T>
+where
+    T: SeqNum,
+{
     next: T,
     // if > 0: the increment; if == 0: the instance is passivated
     incr: T,
+    #[cfg_attr(feature = "serde", serde(default = "SeqNum::max_val"))]
+    max: T,
 }
 
 impl<T> Sequence<T>
@@ -59,6 +64,7 @@ where
         Self {
             next: T::zero(),
             incr: T::one(),
+            max: T::max_val(),
         }
     }
 
@@ -68,6 +74,7 @@ where
         Self {
             next: T::zero(),
             incr: T::zero(),
+            max: T::max_val(),
         }
     }
 
@@ -77,6 +84,7 @@ where
         Self {
             next: val,
             incr: T::one(),
+            max: T::max_val(),
         }
     }
 
@@ -87,6 +95,7 @@ where
             Some(next) => Self {
                 next,
                 incr: T::one(),
+                max: T::max_val(),
             },
             None => Self::dead(),
         }
@@ -101,7 +110,16 @@ where
         )
     }
 
-    /// Consumes the sequence and produces one that increments with the given value.
+    /// Produces an instance with explicitly configured upper limit.
+    pub fn with_start_end_increment(start: T, end: T, incr: T) -> Self {
+        Self {
+            next: start,
+            incr,
+            max: end,
+        }
+    }
+
+    /// Consumes the Sequence and produces one that increments with the given value.
     ///
     /// An increment of `0` produces a dead sequence that will not return any value.
     ///
@@ -149,6 +167,14 @@ where
     }
 }
 
+/// Allows using Sequence for iterations.
+///
+/// Example
+///
+/// ```rust
+/// # use sequential::Sequence;
+/// assert_eq!(Sequence::<u8>::with_start_end_increment(23, 38, 3).sum::<u8>(),183);
+/// ```
 impl<T> Iterator for Sequence<T>
 where
     T: SeqNum,
@@ -156,6 +182,10 @@ where
     type Item = T;
 
     fn next(&mut self) -> Option<Self::Item> {
+        if self.next > self.max {
+            self.set_passive();
+        }
+
         if self.is_passive() {
             None
         } else {
@@ -219,12 +249,35 @@ mod test {
     #[cfg(feature = "serde")]
     #[test]
     fn test_serde() {
-        let mut sequence = Sequence::<u32>::start_with(55);
-        assert_eq!(sequence.next(), Some(55));
+        let mut sequence = Sequence::<u32>::with_start_end_increment(22, 99, 11);
+        assert_eq!(sequence.next(), Some(22));
         let s = serde_json::to_string(&sequence).unwrap();
-        assert_eq!(&*s, r#"{"next":56,"incr":1}"#);
+        assert_eq!(&*s, r#"{"next":33,"incr":11,"max":99}"#);
 
         let mut sequence2: Sequence<u32> = serde_json::from_str(&*s).unwrap();
-        assert_eq!(sequence2.next(), Some(56));
+        assert_eq!(sequence2.next(), Some(33));
+        assert_eq!(sequence2.next(), Some(44));
+        assert_eq!(sequence2.next(), Some(55));
+        assert_eq!(sequence2.next(), Some(66));
+        assert_eq!(sequence2.next(), Some(77));
+        assert_eq!(sequence2.next(), Some(88));
+        assert_eq!(sequence2.next(), Some(99));
+        assert_eq!(sequence2.next(), None);
+
+        // compatibility to old serialization format (without max)
+        let old_format = r#"{"next":88,"incr":11}"#;
+        let mut sequence3: Sequence<u32> = serde_json::from_str(&old_format).unwrap();
+        assert_eq!(sequence3.next(), Some(88));
+        assert_eq!(sequence3.next(), Some(99));
+        assert_eq!(sequence3.next(), Some(110));
+        assert_eq!(sequence3.next(), Some(121));
+    }
+
+    #[test]
+    fn test_iter() {
+        assert_eq!(
+            Sequence::<u8>::with_start_end_increment(23, 38, 3).sum::<u8>(),
+            183
+        );
     }
 }

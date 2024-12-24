@@ -1,7 +1,12 @@
+/// Helper trait to deal generically with built-in types.
 pub trait SeqNum: Copy + Ord + PartialEq {
+    /// Returns the max value of the type.
     fn max_val() -> Self;
+    /// Calls `checked_add` of the type.
     fn checked_add(self, other: Self) -> Option<Self>;
+    /// Returns 0.
     fn zero() -> Self;
+    /// Returns 1.
     fn one() -> Self;
 }
 impl SeqNum for usize {
